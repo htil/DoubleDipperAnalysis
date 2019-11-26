@@ -54,11 +54,12 @@ def contigEpochs(entries: Sequence[object], epochSeconds: int = None, verbose=Tr
     eeg = None #Free by dereferencing
 
     data = np.array(data)
+    print(data)
     data /= 1e6 # Convert from microvolts to volts
     data = np.reshape(data, [numEpochs, numChannels, epochSamples])
 
 
-    epochs = mne.EpochsArray(data, info)
+    epochs = mne.EpochsArray(data, info)#, reject=reject)
     return epochs
 
 
