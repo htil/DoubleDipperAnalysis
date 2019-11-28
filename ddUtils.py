@@ -2,89 +2,107 @@ import numpy as np
 import mne
 
 import sys
-from functools import reduce
-from typing import Iterable, Sequence, Generator
+from typing import Iterable, Sequence, Generator, Dict
 
-def contigEpochs(entries: Sequence[object], epochSeconds: int = None, verbose=True):
+from functional import *
+from events import *
+from htil_math import transpose
+
+commonEvents = {
+        "problem": {
+            "code": 1,
+            "delay": 6000,
+        },
+        "strategyPrompt": {
+            "code": 2,
+            "delay": 13000
+        }
+}
+
+EEG_SCALE = 1e-6 # Microvolts to VOLTS
+
+TIME_SCALE = 1e-3 # Milliseconds to Seconds
+
+
+def practiceEpochs(entries: Sequence[object], epochSeconds):
+    return _contigEpochs(entries, epochSeconds, commonEvents)
+
+def _contigEpochs(entries: Sequence[object], epochSeconds: int, eventDict: Dict[str,int]):
+    info = _info(entries)
+
+    data = _epochedEEG(entries, info, epochSeconds)
+    timeEpochs = list(nestedMap(lambda packet: packet["timestamp"], data))
+
+    events = matchEvents(timeEpochs, entries, eventDict)
+    data = list(nestedMap(lambda sample: sample["data"], data))
+    data = np.array(data)
+    data = data.transpose([0,2,1])
+    data *= EEG_SCALE
+    events = np.concatenate( [events[:5], events[15:]], axis=0 )
+    epochs = mne.EpochsArray(data, info, events=events)
+    return epochs
+
+def _info(entries):
+    ind = findNext(lambda ent: ent["type"] == "eeg", entries, 0)
+    eegPacket = entries[ind]
+    rawInfo = eegPacket["eeg"][0]["info"]
+    samplingRate = rawInfo["samplingRate"]
+    channels = rawInfo["channelNames"]
+    numChannels = len(channels)
+    info = mne.create_info(channels,samplingRate,ch_types=["eeg"]*numChannels)
+    return info
+
+
+def _epochedEEG(entries, info: mne.Info, epochSeconds: int):
+    # Signal data
     eeg = extract(lambda entry: entry["type"] == "eeg", entries)
     eeg = flattenSignal(eeg, "eeg")
     eeg = list(eeg)
 
-    rawInfo = eeg[0]["info"]
-    samplingRate = rawInfo["samplingRate"]
-    channels = rawInfo["channelNames"]
-    numChannels = len(channels)
-
-    info = mne.create_info(channels,samplingRate,ch_types=["eeg"]*numChannels)
-
-
+    # Starts and ends of epochs
     epochBounds = extract(lambda ent: ent["type"] in {"fixationPoint", "end"}, entries)
     epochBounds = map(lambda ent: ent["timestamp"], epochBounds)
     epochBounds = list(epochBounds)
     numEpochs = len(epochBounds) - 1
+    [starts, ends] = labeledBounds(epochBounds)
+    epochSamples = int(epochSeconds * info["sfreq"]);
 
+    data = fitEpochs(eeg, starts, ends, epochSamples)
+    eeg = None #Free by dereferencing
 
-    if not epochSeconds:
-        n = min(50, len(epochBounds) - 1)
-        avg = 0.
-        for i in range(n):
-            avg += (epochBounds[i+1] - epochBounds[i]) / n
-        epochSeconds = int(avg / 1e3)
-    epochSamples = epochSeconds * samplingRate;
+    return data
 
+def labeledBounds(bounds):
+    def starts():
+        for i in range(0, len(bounds) - 1):
+            yield bounds[i]
+    def ends():
+        for j in range(1,len(bounds)):
+            yield bounds[j]
+    return (starts(),ends())
 
-    if verbose: sys.stderr.write(f"Obtaining {numEpochs} epochs\n");
-    data = []
+def estimateEpochLength(bounds):
+    n = min(50, len(bounds) - 1)
+    avg = 0.
+    for i in range(n):
+        avg += (bounds[i+1] - bounds[i]) / n
+    return avg
+
+def fitEpochs(eeg, starts: Iterable[float], ends: Iterable[float], size: int):
     j = 0
-    for i in range(numEpochs):
-        [start,end] = epochBounds[i:i+2]
+    data = []
+    for (start, end) in zip(starts,ends):
         j = findNext(lambda samp: samp["timestamp"] >= start, eeg, j)
         if j < 0: break
-
-        count = 0
+        epoch = []
         sample = eeg[j]
-        while count < epochSamples and sample["timestamp"] <= end:
-            data.append(sample["data"])
-            count += 1
+        while len(epoch) < size and sample["timestamp"] <= end:
+            epoch.append(sample)
             j += 1
             if j >= len(eeg): break
             sample = eeg[j]
-        missing = epochSamples - count
-        if missing: data.extend( [data[-1] for _ in range(missing)] ) #Pad with the last value
-    eeg = None #Free by dereferencing
+        missing = size - len(epoch)
+        if missing: epoch.extend( [epoch[-1] for _ in range(missing)] ) #Pad with the last value
+        data.append(epoch)
+    return data
 
-    data = np.array(data)
-    print(data)
-    data /= 1e6 # Convert from microvolts to volts
-    data = np.reshape(data, [numEpochs, numChannels, epochSamples])
-
-
-    epochs = mne.EpochsArray(data, info)#, reject=reject)
-    return epochs
-
-
-
-def findNext(pred, seq, start=0):
-    for i in range(start, len(seq)):
-        if pred(seq[i]): return i
-    return -1
-
-def flattenSignal(data: Iterable[object], key) -> Generator[object,None,None]:
-    if callable(key): fn = key
-    else:             fn = lambda entry: entry[key]
-    for entry in map(fn, data):
-        yield from entry
-
-def mapInPlace(fn, seq: Sequence[object]):
-    for (i, el) in enumerate(seq):
-        seq[i] = fn(el)
-
-def extract(pred, seq: Sequence[object]) -> Iterable[object]:
-    i = 0
-    while i < len(seq):
-        el = seq[i]
-        if pred(el):
-            yield el
-            del seq[i]
-        else:
-            i += 1
