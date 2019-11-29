@@ -1,6 +1,32 @@
 import numpy as np
 
-from functional import findNext
+from functional import findNext, extract
+
+_EPOCH_SECONDS = 22
+
+def match2Raw(raw, entries, eventDict):
+    """
+    :param int startTime: Start timestamp in milliseconds
+    """
+    allOccs = {}
+    numEvents = 0
+    for eventName in eventDict.keys():
+        allOccs[eventName] = list(extract(lambda ent: ent["type"] == eventName, entries))
+        numEvents += len(allOccs[eventName])
+
+    events = np.zeros([numEvents, 3], np.int64)
+    i = 0
+    for (eventName, occs) in allOccs.items():
+        delaySeconds = eventDict[eventName]["delay"] / 1000
+        code = eventDict[eventName]["code"]
+        for (epochNo, occ) in enumerate(occs):
+            sampleTime = epochNo*_EPOCH_SECONDS + delaySeconds
+            sampleNo = sampleTime * raw.info["sfreq"]
+            sampleNo = int(sampleNo)
+            events[i,0] = sampleNo
+            events[i,2] = code
+            i += 1
+    return events
 
 def matchEvents(timeEpochs, entries, eventDict):
     """
