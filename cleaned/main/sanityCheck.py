@@ -20,7 +20,15 @@ def check(partNo):
             raise Exception(f"{partNo}: Wrong number of tones for {cond}")
         counts[cond] = {"darkening": darkCount, "paths": len(paths)}
 
-for key in counts["C1"].keys():
-    assert counts["C1"][key] == counts["C2"][key]
+    for key in counts["C1"].keys():
+        assert counts["C1"][key] == counts["C2"][key]
+    sys.stderr.write(f"Checked participant {partNo}\n")
 
-partNo = int(sys.argv[1])
+if len(sys.argv) > 1:
+    partNo = int(sys.argv[1])
+    check(partNo)
+else:
+    for path in glob.glob("*"):
+        if path.endswith(".py"): continue
+        partNo = int(path)
+        check(partNo)

@@ -92,7 +92,7 @@ def processSess(sess, condition):
         np.save(outData, epoch)
         
         # LABELS
-        meta = {"condition": condition, "path": os.path.basename(outData)}
+        meta = {"condition": condition, "path": os.path.basename(outData), "timestamp": startTime}
         problem = problems[i]
         meta.update(getProblem(problem))
         def pred(ent):

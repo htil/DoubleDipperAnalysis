@@ -19,29 +19,37 @@ def getProblem(entry):
 def correctLabeller(entries):
     isArith = lambda k: "+" in k or "-" in k
     def pred(ent):
+        if ent["type"] == "skipForm": return True
         if ent["type"] != "submission": return False
         return any(map(isArith, ent.keys()))
     submissions = list(filter(pred, entries))
-    if len(submissions) != 1:
-        print(submissions)
-        raise Exception("More than one submission found for epoch")
 
+    # The "skipForm" in pred could have captured a strategy submission,
+    # so choose 0 to always get the problem answer submission
     submission = submissions[0]
+
+    if submission["type"] == "skipForm":
+        return {"answer": "skipped"}
+
     probText = list(filter(isArith, submission.keys()))[0]
     result = submission[probText]
-    if result == "correct":
-        correct = True
-    elif result == "incorrect":
-        correct = False
-    else:
-        correct = None
-    return {"correct": correct}
+    assert result in {"correct", "incorrect"}
+    answer = "correct" if result == "correct" else "incorrect"
+    return {"answer": answer}
 
 def strategyLabeller(entries):
-    subs = filter(lambda ent: ent["type"] == "submission" and "strategy" in ent.keys(),entries)
+    def pred(ent):
+        if ent["type"] == "skipForm": return True
+        return ent["type"] == "submission" and "strategy" in ent.keys()
+    subs = filter(pred,entries)
     subs = list(subs)
-    assert len(subs) == 1
-    sub = subs[0]
+
+    # Fat-fingered the `Submit` button and lost the data
+    if not subs: return {"strategy": None}
+
+    # The "skipForm" pred could have captured the problem answer submission, so do -1 to get last submission
+    sub = subs[-1]
+    if sub["type"] == "skipForm": return {"strategy": None}
     return {"strategy": sub["strategy"]}
 
 def brightnessLabeller(entries):
