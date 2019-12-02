@@ -5,24 +5,30 @@ A script for putting the raw JSON data into a cleaner format
 Usage: python clean.py data.json outDirectory/
 """
 
+import pdb
+
 # Python API
 import sys
 import os
 import json
 
+# External
+import numpy as np
+
 # Local
-from functional import findNext, extract
+from functional import findNext, nestedMap, extract
 from signal import flattenSignal
+from labellers import *
 
 if len(sys.argv) != 3:
     print(__doc__)
     sys.exit(1)
 
 dataPath = sys.argv[1]
-outPath = sys.argv[2]
+outDir = sys.argv[2]
 
 assert os.path.exists(dataPath)
-if not os.path.exists(outPath): os.makedirs(outPath)
+if not os.path.exists(outDir): os.makedirs(outDir)
 
 with open(dataPath, "r") as r: data = json.load(r)
 
@@ -42,68 +48,17 @@ epochSamples = epochSeconds * sampleFrequency
 
 
 
-def problemLabeller(entries):
-    prob = list(filter(lambda ent: ent["type"] == "problem", entries))
-    assert len(prob) == 1
-    prob = prob[0]
-
-    text = prob["problem"]
-    text = "".join(text.split())
-    assert "+" in text or "-" in text
-    if "+" in text:
-        op = "addition"
-        delim = "+"
-    else:
-        op = "subtraction"
-        delim = "-"
-    [leftOperand,rightOperand] = text.split(delim)
-    leftOperand = int(leftOperand)
-    rightOperand = int(rightOperand)
-
-    return {"problem": text, "left": leftOperand,"right": rightOperand,"op": op}
-
-def correctLabeller(entries):
-    isArith = lambda k: "+" in k or "-" in k
-    def pred(ent):
-        if ent["type"] != "submission": return False
-        return any(map(isArith, ent.keys()))
-    submissions = list(filter(pred, entries))
-    assert len(submissions) == 1
-
-    submission = submissions[0]
-    probText = list(filter(isArith, submission.keys()))[0]
-    result = submission[probText]
-    if result == "correct":
-        correct = True
-    elif result == "incorrect":
-        correct = False
-    else:
-        correct = None
-    return {"correct": correct}
-
-def strategyLabeller(entries):
-    subs = filter(lambda ent: ent["type"] == "submission" and "strategy" in ent.keys(),entries)
-    subs = list(subs)
-    assert len(subs) == 1
-    sub = sub[0]
-    return {"strategy": sub["strategy"]}
-
-def brightnessLabeller(entries):
-    entries = filter(lambda ent: ent["type"] == "brightness", entries)
-    entries = filter(lambda ent: ent["brightness"] < 1, entries)
-    entries = list(entries)
-    darkening = len(entries) > 0
-    return {"darkening": darkening}
-
-def toneLabeller(entries):
-    entries = filter(lambda ent: ent["type"] == "tone", entries)
-    entries = list(entries)
-    tone = len(entries) > 0
-    return {"tone": tone}
 
 def processSess(sess, condition):
-    commonMeta = {"condition": condition}
-    labellers = []
+    labelFuncs = [correctLabeller, strategyLabeller, brightnessLabeller, toneLabeller]
+
+    eeg = extract(lambda ent: ent["type"] == "eeg", sess)
+    eeg = flattenSignal(eeg, "eeg")
+    eeg = nestedMap(lambda ent: ent, eeg)
+    eeg = list(eeg)
+
+    # Forgot to add timestamps to problems, so they have to be taken care of separately
+    problems = list(extract(lambda ent: ent["type"] == "problem", sess))
 
 
     def findBounds(ind):
@@ -111,53 +66,45 @@ def processSess(sess, condition):
         ind = findNext(nextPoint, sess, ind)
         if ind == -1: return (-1, -1)
         start = ind
-
         ind = findNext(lambda ent: ent["type"] == "fixationPoint", sess, ind+1)
-        if ind == -1: return (start, len(sess) - 1)
-
+        if ind == -1: return (start, len(sess))
         end = ind + 1
         return (start, end)
 
-
-    epochNo = 0
     i = 0
     (start, end) = findBounds(0)
-    epoch
     while start != -1:
+        outPath = f"{condition}_epoch{i}"
+        outData = os.path.join(outDir, outPath + ".npy")
+        outMeta = os.path.join(outDir, outPath + "_labels" + ".json")
+        startTime = sess[start]["timestamp"]
+        endTime = sess[end-1]["timestamp"]
 
-        epochEnts = sess[start:end]
-        eeg = extract(lambda ent: ent["type"] == "eeg", epochEnts)
-        eeg = flattenSignal(eeg, "eeg")
-        eeg = map(lambda ent: ent["data"], eeg)
-        eeg = list(eeg)
+        epoch = filter(lambda ent: startTime <= ent["timestamp"] and ent["timestamp"] <= endTime, eeg)
+        epoch = map(lambda ent: ent["data"], epoch)
+        epoch = list(epoch)
 
-        if len(eeg) < epochSamples:
-            slack = epochSamples - len(eeg)
-            eeg.extend(eeg[-1] for _ in range(slack))
-        eeg = np.array(eeg)   # [time, channel]
-        eeg = eeg.transpose() # [channel, time]
+        if len(epoch) < epochSamples:
+            slack = epochSamples - len(epoch)
+            epoch.extend(epoch[-1] for _ in range(slack))
+        epoch = np.array(epoch)   # [time, channel]
+        epoch = epoch.transpose() # [channel, time]
+        np.save(outData, epoch)
         
-        (start,end) = findBounds(end)
+        # LABELS
+        meta = {"condition": condition, "path": os.path.basename(outData)}
+        problem = problems[i]
+        meta.update(getProblem(problem))
+        def pred(ent):
+            if "timestamp" not in ent: return True
+            return startTime <= ent["timestamp"] and ent["timestamp"] <= endTime
+        evs = list(filter(pred, sess))
+        for f in labelFuncs:
+            meta.update(f(evs))
+        with open(outMeta, "w") as w: json.dump(meta,w,indent=2)
 
+        (start,end) = findBounds(end-1)
+        i += 1
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+processSess(sess1, firstCond)
+processSess(sess2, secondCond)

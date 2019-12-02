@@ -2,8 +2,7 @@ from typing import Iterable, Sequence, Generator
 
 def nestedMap(fn, sequences):
     for seq in sequences:
-        mapped = map(fn, seq)
-        yield list(mapped)
+        yield from map(fn, seq)
 
 def findNext(pred, seq, start=0):
     for i in range(start, len(seq)):
