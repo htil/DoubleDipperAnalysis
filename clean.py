@@ -16,9 +16,9 @@ import json
 import numpy as np
 
 # Local
-from functional import findNext, nestedMap, extract
-from signal import flattenSignal
-from labellers import *
+from double_dipper.functional import findNext, nestedMap, extract
+from double_dipper.signal import flattenSignal
+from double_dipper.labellers import *
 
 if len(sys.argv) != 3:
     print(__doc__)
@@ -41,6 +41,7 @@ sess1 = data[:ind]
 sess2 = data[ind:]
 data = None
 
+EEG_SCALE = 1e-6 #TODO: Put conversion factors like these in a config file
 epochSeconds = 22 #TODO: Estimate from data automatically
 numChannels = 4 #TODO: Obtain from data directly
 sampleFrequency = 256 #TODO: Obtain from data directly
@@ -87,8 +88,10 @@ def processSess(sess, condition):
         if len(epoch) < epochSamples:
             slack = epochSamples - len(epoch)
             epoch.extend(epoch[-1] for _ in range(slack))
+        epoch = epoch[:epochSamples] # Trim if it's too long
         epoch = np.array(epoch)   # [time, channel]
         epoch = epoch.transpose() # [channel, time]
+        epoch *= EEG_SCALE
         np.save(outData, epoch)
         
         # LABELS
