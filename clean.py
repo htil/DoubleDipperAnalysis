@@ -2,7 +2,7 @@
 """
 A script for putting the raw JSON data into a cleaner format
 
-Usage: python clean.py data.json outDirectory/
+Usage: python clean.py subjNumber data.json outDirectory/
 """
 
 import pdb
@@ -16,16 +16,18 @@ import json
 import numpy as np
 
 # Local
+from double_dipper import constants
 from double_dipper.functional import findNext, nestedMap, extract
 from double_dipper.signal import flattenSignal
 from double_dipper.labellers import *
 
-if len(sys.argv) != 3:
+if len(sys.argv) != 4:
     print(__doc__)
     sys.exit(1)
 
-dataPath = sys.argv[1]
-outDir = sys.argv[2]
+subjNumber = int(sys.argv[1])
+dataPath = sys.argv[2]
+outDir = sys.argv[3]
 
 assert os.path.exists(dataPath)
 if not os.path.exists(outDir): os.makedirs(outDir)
@@ -41,16 +43,17 @@ sess1 = data[:ind]
 sess2 = data[ind:]
 data = None
 
-EEG_SCALE = 1e-6 #TODO: Put conversion factors like these in a config file
-epochSeconds = 22 #TODO: Estimate from data automatically
-numChannels = 4 #TODO: Obtain from data directly
-sampleFrequency = 256 #TODO: Obtain from data directly
+EEG_SCALE = constants.eeg_scale
+epochSeconds = constants.epoch_length
+numChannels = len(constants.channel_names)
+sampleFrequency = constants.sfreq
 epochSamples = epochSeconds * sampleFrequency
 
 
 
-
+epochNo = 0
 def processSess(sess, condition):
+    global epochNo
     labelFuncs = [correctLabeller, strategyLabeller, brightnessLabeller, toneLabeller]
 
     eeg = extract(lambda ent: ent["type"] == "eeg", sess)
@@ -95,7 +98,12 @@ def processSess(sess, condition):
         np.save(outData, epoch)
         
         # LABELS
-        meta = {"condition": condition, "path": os.path.basename(outData), "timestamp": startTime}
+        meta = {"condition": condition,
+                "path": os.path.basename(outData),
+                "timestamp": startTime,
+                "epoch": epochNo,
+                "id": subjNumber
+        }
         problem = problems[i]
         meta.update(getProblem(problem))
         def pred(ent):
@@ -108,6 +116,7 @@ def processSess(sess, condition):
 
         (start,end) = findBounds(end-1)
         i += 1
+        epochNo += 1
 
 processSess(sess1, firstCond)
 processSess(sess2, secondCond)
