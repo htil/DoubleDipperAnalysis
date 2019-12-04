@@ -17,6 +17,16 @@ Length of epoch in seconds
 """
 epoch_length = 22
 
+"""
+Number of problems/epochs in regular experiment
+"""
+num_problems = 112
+
+"""
+Number of problems/epochs in a practice experiment"
+"""
+num_practice = 10
+
 
 class _Event(object):
     def __init__(self, code, delay):
