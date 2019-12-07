@@ -1,4 +1,5 @@
 import numpy as _np
+import mne as _mne
 
 """
 Sample frequency in Hz
@@ -10,7 +11,10 @@ Factor that all EEG readings should be multiplied by before being used in mne
 """
 eeg_scale = 1e-6
 
-channel_names = ["EEG1", "EEG2", "EEG3", "EEG4"]
+"""
+Names of the EEG channels according to 10-10 nomenclature
+"""
+channel_names = ["Tp9", "Fp1", "Fp2", "Tp10"]
 
 """
 Length of epoch in seconds
@@ -26,6 +30,11 @@ num_problems = 112
 Number of problems/epochs in a practice experiment"
 """
 num_practice = 10
+
+"""
+MNE info object about channels and sampling frequency
+"""
+info = _mne.create_info(channel_names, sfreq, ch_types=["eeg"]*len(channel_names))
 
 
 class _Event(object):
