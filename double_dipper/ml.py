@@ -8,6 +8,14 @@ from sklearn.metrics import precision_recall_fscore_support
 # Python Library
 import sys
 
+def temporal_cross_validation(X, Y, scorer = None, splits=[.2,.4,.6,.8], verbose = True):
+    if not scorer: scorer = lda_scorer
+    precision = np.zeros(len(splits))
+    recall = np.zeros(len(splits))
+    for (i, spl) in enumerate(splits):
+        split_ind = int(len(X) * spl)
+        (precision[i], recall[i]) = scorer(X[:split_ind], Y[:split_ind], X[split_ind:], Y[split_ind:])
+    return (precision, recall)
 
 def cross_validation(dataset, scorer = None, verbose = True):
     if not scorer: scorer = lda_scorer
