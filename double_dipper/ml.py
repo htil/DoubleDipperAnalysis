@@ -34,6 +34,11 @@ def cross_validation(dataset, scorer = None, verbose = True):
             sys.stderr.write(f"Held out fold {str(testKey)}: precision = {precision[i]}, recall = {recall[i]}\n")
     return (precision, recall)
 
+def lda_predictor(X, Y, testX):
+    model = LinearDiscriminantAnalysis()
+    model.fit(X, Y)
+    return model.predict(testX)
+
 def lda_scorer(X, Y, testX, testY):
     return _model_score(LinearDiscriminantAnalysis(), X, Y, testX, testY)
 def _model_score(model, X, Y, testX, testY):
