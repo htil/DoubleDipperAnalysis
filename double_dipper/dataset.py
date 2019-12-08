@@ -11,7 +11,7 @@ def mapDataset(fn_x, dataset, fn_y = None):
 map_dataset = mapDataset
 
 def subset(pred, dataset):
-    subset = defaultdict(lambda: {"x":[], "y":[]})
+    subset = _empty_dataset()
     for (key, fold) in dataset.items():
         if pred(key): subset[key] = fold
     return subset
@@ -21,3 +21,6 @@ def avg_data(dset) -> np.ndarray:
         np.concatenate([dset[k]["x"] for k in dset.keys()], axis=0)
         , axis=0
     )
+
+def _empty_dataset():
+    return defaultdict(lambda: {"x":[], "y":[]})
