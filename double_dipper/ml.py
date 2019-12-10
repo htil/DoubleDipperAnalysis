@@ -30,8 +30,7 @@ def grid_search(X, Y, tsX, tsY, feature_selectors=None, resamplers=None, models=
 
     inds = np.zeros(len(axes), np.int8)
     best_inds = np.zeros(len(axes), np.int8)
-    best_conf = np.zeros([2, 2])
-
+    best_conf = np.zeros([2, 2]) 
     best_f1 = -float("inf")
     for vals in product(*axes):
         kwargs = {name:val for (name, val) in zip(arg_names, vals)}
@@ -58,7 +57,10 @@ def _test_instance(X, Y, tsX, tsY, feature_selector, resampler, model):
         X = feature_selector(X)
         tsX = feature_selector(tsX)
     if resampler:
-        (X, Y) = resampler().fit_resample(X, Y)
+        n_lacking = len(Y) // 2 - np.sum(Y)
+        if n_lacking: (X, Y) = resampler().fit_resample(X, Y)
+
+
     mod = model()
     mod.fit(X, Y)
     preds = mod.predict(tsX)
@@ -67,7 +69,7 @@ def _test_instance(X, Y, tsX, tsY, feature_selector, resampler, model):
 def _extract_metrics(conf):
     prec = conf[1, 1] / np.sum(conf[:, 1])
     rec = conf[1, 1] / np.sum(conf[1, :])
-    f1 = 2*prec*rec / (prec + prec)
+    f1 = 2*prec*rec / (prec + rec)
     return (prec, rec, f1)
 
 
