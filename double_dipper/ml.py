@@ -15,24 +15,16 @@ def grid_search(X, Y, tsX, tsY, feature_selectors=None, resamplers=None, models=
     if not feature_selectors: feature_selectors = [None]
     if not resamplers: resamplers = [None]
 
-    arg_names = ["feature_selector", "resampler", "model"]
-    axes = [feature_selectors, resamplers, models]
-
-    def inc_inds(inds):
-        i = 0
-        inds[i] += 1
-        while (inds[i] >= len(axes[i])):
-            inds[i] = 0
-            i += 1
-            if i >= len(inds): break
-            inds[i] += 1
-        return inds
+    arg_names = ["model", "resampler", "feature_selector"]
+    axes = [models, resamplers, feature_selectors]
 
     inds = np.zeros(len(axes), np.int8)
     best_inds = np.zeros(len(axes), np.int8)
     best_conf = np.zeros([2, 2]) 
     best_f1 = -float("inf")
-    for vals in product(*axes):
+
+    for inds in product(*[range(len(axis)) for axis in axes]):
+        vals = [axis[i] for (i, axis) in zip(inds, axes)]
         kwargs = {name:val for (name, val) in zip(arg_names, vals)}
         conf = _test_instance(X, Y, tsX, tsY, **kwargs)
         (prec, rec, f1) = _extract_metrics(conf)
@@ -47,7 +39,6 @@ def grid_search(X, Y, tsX, tsY, feature_selectors=None, resamplers=None, models=
             best_f1 = f1
             if verbose: print("New best achieved")
         if verbose: print()
-        inc_inds(inds)
 
     return (best_inds, best_conf)
 
@@ -59,7 +50,6 @@ def _test_instance(X, Y, tsX, tsY, feature_selector, resampler, model):
     if resampler:
         n_lacking = len(Y) // 2 - np.sum(Y)
         if n_lacking: (X, Y) = resampler().fit_resample(X, Y)
-
 
     mod = model()
     mod.fit(X, Y)
@@ -73,16 +63,6 @@ def _extract_metrics(conf):
     return (prec, rec, f1)
 
 
-
-class _IdentityResampler(object):
-    def __init__(self):
-        pass
-    def fit_resample(self, X, Y):
-        return (X, Y)
-    def __str__(self):
-        return self.__repr__()
-    def __repr__(self):
-        return "NoResampling"
 
 def temporal_cross_validation(X, Y, scorer = None, splits=[.2,.4,.6,.8], verbose = True):
     if not scorer: scorer = lda_scorer

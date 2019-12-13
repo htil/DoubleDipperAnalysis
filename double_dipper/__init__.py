@@ -6,3 +6,4 @@ from . import labellers
 from . import signal
 from . import ml
 from . import dataset
+from . import features
