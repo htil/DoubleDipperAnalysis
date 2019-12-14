@@ -64,14 +64,27 @@ def _extract_metrics(conf):
 
 
 
-def temporal_cross_validation(X, Y, scorer = None, splits=[.2,.4,.6,.8], verbose = True):
-    if not scorer: scorer = lda_scorer
+def temporal_cross_validation(X, Y, resampler = None, model = None, splits=[.2,.4,.6,.8], verbose = True):
+    if not model: model = LinearDiscriminantAnalysis
     precision = np.zeros(len(splits))
     recall = np.zeros(len(splits))
     for (i, spl) in enumerate(splits):
         split_ind = int(len(X) * spl)
-        (precision[i], recall[i]) = scorer(X[:split_ind], Y[:split_ind], X[split_ind:], Y[split_ind:])
+        (trX, trY) = (X[:split_ind], Y[:split_ind])
+        if resampler and not _too_skewed(trY):
+            (trX,trY) = resampler().fit_resample(trX, trY)
+
+        mod = model()
+        mod.fit(trX, trY)
+        preds = mod.predict(X[split_ind:])
+        (precision[i], recall[i], _, _) = precision_recall_fscore_support(Y[split_ind:], preds, average="binary")
     return (precision, recall)
+
+def _too_skewed(Y, k_neighbors=5):
+    n_neighbors = k_neighbors + 1
+    numPos = np.sum(Y)
+    numNeg = np.prod(Y.shape) - numPos
+    return (numPos < n_neighbors) or (numNeg >= n_neighbors)
 
 def cross_validation(dataset, scorer = None, verbose = True):
     if not scorer: scorer = lda_scorer
